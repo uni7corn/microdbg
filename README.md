@@ -1,5 +1,5 @@
 # MicroDbg
-Allows you to emulate an Android native library
+Universal simulation debugging framework
 
 # Thanks
 - [unidbg](github.com/zhkl0228/unidbg)
