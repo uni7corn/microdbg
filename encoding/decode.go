@@ -56,7 +56,7 @@ func getUnmarshalData(typ reflect2.Type, bs int) *handlerData {
 
 func decode(typ reflect2.Type, bs int) (handler, structSize) {
 	switch typ.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Complex64, reflect.Complex128:
+	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Complex64, reflect.Complex128:
 		size := int(typ.Type1().Size())
 		return func(stream Stream, ptr unsafe.Pointer) error {
 			_, err := stream.Read(unsafe.Slice((*byte)(ptr), size))
@@ -78,7 +78,7 @@ func decode(typ reflect2.Type, bs int) (handler, structSize) {
 			}
 			return err
 		}, structSize{8}
-	case reflect.Uintptr, reflect.UnsafePointer:
+	case reflect.Int, reflect.Uint, reflect.Uintptr, reflect.UnsafePointer:
 		size := int(typ.Type1().Size())
 		var pad int
 		if size > bs {
