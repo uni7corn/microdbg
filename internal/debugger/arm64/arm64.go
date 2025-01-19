@@ -1,7 +1,6 @@
 package arm64
 
 import (
-	"github.com/modern-go/reflect2"
 	"github.com/wnxd/microdbg/debugger"
 	"github.com/wnxd/microdbg/emulator"
 	emu_arm64 "github.com/wnxd/microdbg/emulator/arm64"
@@ -109,7 +108,7 @@ func (dbg *Arm64Dbg[D]) ArgWrite(ctx debugger.RegisterContext, calling debugger.
 }
 
 func (dbg *Arm64Dbg[D]) RetExtract(ctx debugger.RegisterContext, val any) error {
-	if reflect2.IsNil(val) {
+	if internal.GetPtr(val) == nil {
 		return debugger.ErrArgumentInvalid
 	}
 	stream := &regStream{dbg: dbg, ctx: ctx}
@@ -117,7 +116,7 @@ func (dbg *Arm64Dbg[D]) RetExtract(ctx debugger.RegisterContext, val any) error 
 }
 
 func (dbg *Arm64Dbg[D]) RetWrite(ctx debugger.RegisterContext, val any) error {
-	if reflect2.IsNil(val) {
+	if internal.GetPtr(val) == nil {
 		return ctx.RegWrite(emu_arm64.ARM64_REG_X0, 0)
 	}
 	stream := &regStream{dbg: dbg, ctx: ctx}

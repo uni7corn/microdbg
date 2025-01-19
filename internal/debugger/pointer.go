@@ -21,3 +21,7 @@ func Sizeof[V any]() uintptr {
 	var v V
 	return unsafe.Sizeof(v)
 }
+
+func GetPtr(v any) unsafe.Pointer {
+	return (*struct{ _, data unsafe.Pointer })(unsafe.Pointer(&v)).data
+}

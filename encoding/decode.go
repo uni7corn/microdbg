@@ -4,45 +4,43 @@ import (
 	"reflect"
 	"sync"
 	"unsafe"
-
-	"github.com/modern-go/reflect2"
 )
 
 var decodeProcess sync.Map
 
 func DecodeSize(blockSize int, val any) int {
-	if reflect2.IsNil(val) {
+	if getPtr(val) == nil {
 		return blockSize
 	}
-	typ := reflect2.TypeOf(val)
+	typ := reflect.TypeOf(val)
 	if typ.Kind() == reflect.Pointer {
-		typ = typ.(reflect2.PtrType).Elem()
+		typ = typ.Elem()
 	}
 	return getUnmarshalData(typ, blockSize).size
 }
 
 func Decode(stream Stream, val any) error {
 	bs := stream.BlockSize()
-	if reflect2.IsNil(val) {
+	ptr := getPtr(val)
+	if ptr == nil {
 		return stream.Skip(bs)
 	}
-	typ := reflect2.TypeOf(val)
-	ptr := reflect2.PtrOf(val)
+	typ := reflect.TypeOf(val)
 	switch typ.Kind() {
 	case reflect.Pointer:
-		typ = typ.(reflect2.PtrType).Elem()
+		typ = typ.Elem()
 	case reflect.Slice, reflect.String:
 		stream = fakeStream{stream}
 	case reflect.Struct:
-		if st := typ.(reflect2.StructType); st.NumField() == 1 && st.Field(0).Type().Kind() == reflect.Pointer {
+		if typ.NumField() == 1 && typ.Field(0).Type.Kind() == reflect.Pointer {
 			return getUnmarshalData(typ, bs).handler(stream, unsafe.Pointer(&ptr))
 		}
 	}
 	return getUnmarshalData(typ, bs).handler(stream, ptr)
 }
 
-func getUnmarshalData(typ reflect2.Type, bs int) *handlerData {
-	key := [2]uintptr{uintptr(bs), typ.RType()}
+func getUnmarshalData(typ reflect.Type, bs int) *handlerData {
+	key := [2]uintptr{uintptr(bs), getRType(typ)}
 	var data *handlerData
 	if v, ok := decodeProcess.Load(key); ok {
 		data = v.(*handlerData)
@@ -54,10 +52,10 @@ func getUnmarshalData(typ reflect2.Type, bs int) *handlerData {
 	return data
 }
 
-func decode(typ reflect2.Type, bs int) (handler, structSize) {
+func decode(typ reflect.Type, bs int) (handler, structSize) {
 	switch typ.Kind() {
 	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Complex64, reflect.Complex128:
-		size := int(typ.Type1().Size())
+		size := int(typ.Size())
 		return func(stream Stream, ptr unsafe.Pointer) error {
 			_, err := stream.Read(unsafe.Slice((*byte)(ptr), size))
 			return err
@@ -79,7 +77,7 @@ func decode(typ reflect2.Type, bs int) (handler, structSize) {
 			return err
 		}, structSize{8}
 	case reflect.Int, reflect.Uint, reflect.Uintptr, reflect.UnsafePointer:
-		size := int(typ.Type1().Size())
+		size := int(typ.Size())
 		var pad int
 		if size > bs {
 			size = bs
@@ -98,7 +96,7 @@ func decode(typ reflect2.Type, bs int) (handler, structSize) {
 	case reflect.Array:
 		return decodeArray(typ, bs)
 	case reflect.Pointer:
-		return decodePointer(typ.(reflect2.PtrType).Elem(), bs)
+		return decodePointer(typ.Elem(), bs)
 	case reflect.Slice:
 		return decodeSlice(typ, bs)
 	case reflect.String:
@@ -109,7 +107,7 @@ func decode(typ reflect2.Type, bs int) (handler, structSize) {
 	panic("Unsupported Type")
 }
 
-func decodePointer(typ reflect2.Type, bs int) (handler, structSize) {
+func decodePointer(typ reflect.Type, bs int) (handler, structSize) {
 	unmarshal, _ := decode(typ, bs)
 	return func(stream Stream, ptr unsafe.Pointer) error {
 		subStream, err := stream.ReadStream()
@@ -120,9 +118,12 @@ func decodePointer(typ reflect2.Type, bs int) (handler, structSize) {
 		}
 		elemPtr := *(*unsafe.Pointer)(ptr)
 		if elemPtr == nil {
-			elemPtr = typ.UnsafeNew()
+			elemPtr = unsafe_New(getRType(typ))
 			*(*unsafe.Pointer)(ptr) = elemPtr
 		}
 		return unmarshal(subStream, elemPtr)
 	}, structSize{bs}
 }
+
+//go:linkname unsafe_New reflect.unsafe_New
+func unsafe_New(rtype uintptr) unsafe.Pointer

@@ -1,17 +1,27 @@
 package encoding
 
 import (
+	"reflect"
 	"unsafe"
-
-	"github.com/modern-go/reflect2"
 )
 
-func decodeArray(typ reflect2.Type, bs int) (handler, structSize) {
-	t := typ.Type1()
-	count := t.Len()
-	elemType := t.Elem()
-	unmarshal, elemSize := decode(reflect2.Type2(elemType), bs)
-	var size structSize
+func decodeArray(typ reflect.Type, bs int) (handler, structSize) {
+	count := typ.Len()
+	elemType := typ.Elem()
+	if !checkCustom(elemType, bs) {
+		size := make(structSize, count)
+		elemSize := int(elemType.Size())
+		for i := range size {
+			size[i] = elemSize
+		}
+		totalSize := size.Size()
+		return func(stream Stream, ptr unsafe.Pointer) error {
+			_, err := stream.Read(unsafe.Slice((*byte)(ptr), totalSize))
+			return err
+		}, size
+	}
+	unmarshal, elemSize := decode(elemType, bs)
+	size := make(structSize, 0, count*len(elemSize))
 	for i := 0; i < count; i++ {
 		size = size.Add(elemSize)
 	}
@@ -28,8 +38,23 @@ func decodeArray(typ reflect2.Type, bs int) (handler, structSize) {
 	}, size
 }
 
-func decodeSlice(typ reflect2.Type, bs int) (handler, structSize) {
-	unmarshal, elemSize := decode(reflect2.Type2(typ.Type1().Elem()), bs)
+func decodeSlice(typ reflect.Type, bs int) (handler, structSize) {
+	elemType := typ.Elem()
+	if !checkCustom(elemType, bs) {
+		elemSize := int(elemType.Size())
+		return func(stream Stream, ptr unsafe.Pointer) error {
+			subStream, err := stream.ReadStream()
+			if err != nil {
+				return err
+			} else if subStream.Offset() == 0 {
+				return nil
+			}
+			slice := (*sliceData)(ptr)
+			_, err = stream.Read(unsafe.Slice((*byte)(slice.Data), elemSize*slice.Len))
+			return err
+		}, structSize{bs}
+	}
+	unmarshal, elemSize := decode(elemType, bs)
 	elemTotalSize := elemSize.Size()
 	return func(stream Stream, ptr unsafe.Pointer) error {
 		subStream, err := stream.ReadStream()
