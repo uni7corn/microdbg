@@ -1,8 +1,6 @@
 package debugger
 
 import (
-	"unsafe"
-
 	"github.com/wnxd/microdbg/debugger"
 	"github.com/wnxd/microdbg/emulator"
 )
@@ -31,8 +29,9 @@ type Debugger interface {
 	mainThreadRun(func())
 }
 
-type Dbg[Impl Debugger] struct {
-	emu emulator.Emulator
+type Dbg struct {
+	impl Debugger
+	emu  emulator.Emulator
 	memoryManager
 	hookManger
 	fileManager
@@ -40,31 +39,26 @@ type Dbg[Impl Debugger] struct {
 	taskManager
 }
 
-func (dbg *Dbg[Impl]) Init(emu emulator.Emulator) error {
-	impl := dbg.impl()
+func (dbg *Dbg) Init(impl Debugger, emu emulator.Emulator) error {
+	dbg.impl = impl
 	dbg.emu = emu
 	dbg.memoryManager.ctor()
-	dbg.hookManger.ctor(impl)
+	dbg.hookManger.ctor(dbg.impl)
 	dbg.fileManager.ctor()
 	dbg.moduleManager.ctor()
-	dbg.taskManager.ctor(impl)
+	dbg.taskManager.ctor(dbg.impl)
 	return nil
 }
 
-func (dbg *Dbg[Impl]) Close() error {
-	impl := dbg.impl()
+func (dbg *Dbg) Close() error {
 	dbg.taskManager.dtor()
 	dbg.moduleManager.dtor()
 	dbg.fileManager.dtor()
 	dbg.hookManger.dtor()
-	dbg.memoryManager.dtor(impl)
+	dbg.memoryManager.dtor(dbg.impl)
 	return nil
 }
 
-func (dbg *Dbg[Impl]) impl() Debugger {
-	return *(*Impl)(unsafe.Pointer(&dbg))
-}
-
-func (dbg *Dbg[Impl]) Emulator() emulator.Emulator {
+func (dbg *Dbg) Emulator() emulator.Emulator {
 	return dbg.emu
 }

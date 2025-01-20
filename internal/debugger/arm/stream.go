@@ -1,4 +1,4 @@
-package arm64
+package arm
 
 import (
 	"errors"
@@ -7,12 +7,13 @@ import (
 
 	"github.com/wnxd/microdbg/debugger"
 	"github.com/wnxd/microdbg/emulator"
+	emu_arm "github.com/wnxd/microdbg/emulator/arm"
 	emu_arm64 "github.com/wnxd/microdbg/emulator/arm64"
 	"github.com/wnxd/microdbg/encoding"
 	internal "github.com/wnxd/microdbg/internal/debugger"
 )
 
-const ARG_REG_COUNT = 8
+const ARG_REG_COUNT = 4
 
 type regStream struct {
 	dbg   debugger.Debugger
@@ -69,7 +70,7 @@ func (rs *regStream) Read(b []byte) (int, error) {
 			return i + n, err
 		}
 		var err error
-		rs.value, err = rs.ctx.RegRead(emu_arm64.ARM64_REG_X0 + emulator.Reg(count))
+		rs.value, err = rs.ctx.RegRead(emu_arm.ARM_REG_R0 + emulator.Reg(count))
 		if err != nil {
 			return i, err
 		}
@@ -88,7 +89,7 @@ func (rs *regStream) ReadFloat() (float32, error) {
 		rs.stoff += 4
 		return f, err
 	}
-	value, err := rs.ctx.RegRead(emu_arm64.ARM64_REG_S0 + emulator.Reg(rs.vroff))
+	value, err := rs.ctx.RegRead(emu_arm.ARM_REG_S0 + emulator.Reg(rs.vroff))
 	if err != nil {
 		return 0, err
 	}
@@ -103,7 +104,7 @@ func (rs *regStream) ReadDouble() (float64, error) {
 		rs.stoff += 8
 		return d, err
 	}
-	value, err := rs.ctx.RegRead(emu_arm64.ARM64_REG_D0 + emulator.Reg(rs.vroff))
+	value, err := rs.ctx.RegRead(emu_arm.ARM_REG_D0 + emulator.Reg(rs.vroff))
 	if err != nil {
 		return 0, err
 	}
@@ -134,7 +135,7 @@ func (rs *regStream) Write(b []byte) (int, error) {
 	count := rs.groff / POINTER_SIZE
 	if i = rs.groff % POINTER_SIZE; i > 0 {
 		i = copy(internal.ToPtrRaw(&rs.value)[i:], b)
-		err := rs.ctx.RegWrite(emu_arm64.ARM64_REG_X0+emulator.Reg(count), rs.value)
+		err := rs.ctx.RegWrite(emu_arm.ARM_REG_R0+emulator.Reg(count), rs.value)
 		if err != nil {
 			return 0, err
 		}
@@ -148,7 +149,7 @@ func (rs *regStream) Write(b []byte) (int, error) {
 			return i + n, err
 		}
 		n := copy(internal.ToPtrRaw(&rs.value), b[i:])
-		err := rs.ctx.RegWrite(emu_arm64.ARM64_REG_X0+emulator.Reg(count), rs.value)
+		err := rs.ctx.RegWrite(emu_arm.ARM_REG_R0+emulator.Reg(count), rs.value)
 		if err != nil {
 			return i, err
 		}
@@ -165,7 +166,7 @@ func (rs *regStream) WriteFloat(f float32) error {
 		rs.stoff += 4
 		return err
 	}
-	err := rs.ctx.RegWrite(emu_arm64.ARM64_REG_S0+emulator.Reg(rs.vroff), uint64(math.Float32bits(f)))
+	err := rs.ctx.RegWrite(emu_arm.ARM_REG_S0+emulator.Reg(rs.vroff), uint64(math.Float32bits(f)))
 	if err != nil {
 		return err
 	}

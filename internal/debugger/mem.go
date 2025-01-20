@@ -307,60 +307,60 @@ func (mb *memBlock) end() uint64 {
 	return mb.addr + mb.size
 }
 
-func (dbg *Dbg[Impl]) MemMap(addr, size uint64, prot emulator.MemProt) (emulator.MemRegion, error) {
-	return dbg.memoryManager.memMap(dbg.impl(), addr, size, prot)
+func (dbg *Dbg) MemMap(addr, size uint64, prot emulator.MemProt) (emulator.MemRegion, error) {
+	return dbg.memoryManager.memMap(dbg.impl, addr, size, prot)
 }
 
-func (dbg *Dbg[Impl]) MemUnmap(addr, size uint64) error {
-	return dbg.memoryManager.memUnmap(dbg.impl(), addr, size)
+func (dbg *Dbg) MemUnmap(addr, size uint64) error {
+	return dbg.memoryManager.memUnmap(dbg.impl, addr, size)
 }
 
-func (dbg *Dbg[Impl]) MemProtect(addr, size uint64, prot emulator.MemProt) error {
-	return dbg.memoryManager.memProtect(dbg.impl(), addr, size, prot)
+func (dbg *Dbg) MemProtect(addr, size uint64, prot emulator.MemProt) error {
+	return dbg.memoryManager.memProtect(dbg.impl, addr, size, prot)
 }
 
-func (dbg *Dbg[Impl]) MapAlloc(size uint64, prot emulator.MemProt) (emulator.MemRegion, error) {
-	return dbg.memoryManager.mapAlloc(dbg.impl(), size, prot)
+func (dbg *Dbg) MapAlloc(size uint64, prot emulator.MemProt) (emulator.MemRegion, error) {
+	return dbg.memoryManager.mapAlloc(dbg.impl, size, prot)
 }
 
-func (dbg *Dbg[Impl]) MapFree(addr, size uint64) error {
-	return dbg.memoryManager.mapFree(dbg.impl(), addr, size)
+func (dbg *Dbg) MapFree(addr, size uint64) error {
+	return dbg.memoryManager.mapFree(dbg.impl, addr, size)
 }
 
-func (dbg *Dbg[Impl]) MemAlloc(size uint64) (uint64, error) {
-	return dbg.memoryManager.memAlloc(dbg.impl(), size)
+func (dbg *Dbg) MemAlloc(size uint64) (uint64, error) {
+	return dbg.memoryManager.memAlloc(dbg.impl, size)
 }
 
-func (dbg *Dbg[Impl]) MemFree(addr uint64) error {
-	return dbg.memoryManager.memFree(dbg.impl(), addr)
+func (dbg *Dbg) MemFree(addr uint64) error {
+	return dbg.memoryManager.memFree(dbg.impl, addr)
 }
 
-func (dbg *Dbg[Impl]) MemSize(addr uint64) uint64 {
-	return dbg.memoryManager.memSize(dbg.impl(), addr)
+func (dbg *Dbg) MemSize(addr uint64) uint64 {
+	return dbg.memoryManager.memSize(dbg.impl, addr)
 }
 
-func (dbg *Dbg[Impl]) ToPointer(addr uint64) emulator.Pointer {
+func (dbg *Dbg) ToPointer(addr uint64) emulator.Pointer {
 	return emulator.ToPointer(dbg.Emulator(), addr)
 }
 
-func (dbg *Dbg[Impl]) MemImport(val any) ([]uint64, error) {
-	return dbg.memoryManager.memImport(dbg.impl(), val)
+func (dbg *Dbg) MemImport(val any) ([]uint64, error) {
+	return dbg.memoryManager.memImport(dbg.impl, val)
 }
 
-func (dbg *Dbg[Impl]) MemWrite(addr uint64, val any) ([]uint64, error) {
-	return dbg.memoryManager.memWrite(dbg.impl(), addr, val)
+func (dbg *Dbg) MemWrite(addr uint64, val any) ([]uint64, error) {
+	return dbg.memoryManager.memWrite(dbg.impl, addr, val)
 }
 
-func (dbg *Dbg[Impl]) MemExtract(addr uint64, val any) error {
-	return dbg.memoryManager.memExtract(dbg.impl(), addr, val)
+func (dbg *Dbg) MemExtract(addr uint64, val any) error {
+	return dbg.memoryManager.memExtract(dbg.impl, addr, val)
 }
 
-func (dbg *Dbg[Impl]) MemBind(p unsafe.Pointer, size uint64) (uint64, error) {
-	return dbg.memoryManager.memBind(dbg.impl(), p, size)
+func (dbg *Dbg) MemBind(p unsafe.Pointer, size uint64) (uint64, error) {
+	return dbg.memoryManager.memBind(dbg.impl, p, size)
 }
 
-func (dbg *Dbg[Impl]) MemUnbind(addr uint64) error {
-	return dbg.memoryManager.memUnbind(dbg.impl(), addr)
+func (dbg *Dbg) MemUnbind(addr uint64) error {
+	return dbg.memoryManager.memUnbind(dbg.impl, addr)
 }
 
 func calcOverlap(min1, max1, min2, max2 uint64) (uint64, uint64, bool) {

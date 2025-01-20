@@ -310,16 +310,16 @@ func (tc *taskContext) clone() (*taskContext, error) {
 	}, nil
 }
 
-func (dbg *Dbg[Impl]) CreateTask(ctx context.Context) (debugger.Task, error) {
+func (dbg *Dbg) CreateTask(ctx context.Context) (debugger.Task, error) {
 	tc, err := dbg.taskManager.allocTaskContext()
 	if err != nil {
 		return nil, err
 	}
-	return newTask(ctx, tc, dbg.impl())
+	return newTask(ctx, tc, dbg.impl)
 }
 
-func (dbg *Dbg[Impl]) CallTaskOf(t debugger.Task, addr uint64) error {
-	ctrl, err := dbg.impl().TaskControl(t, addr)
+func (dbg *Dbg) CallTaskOf(t debugger.Task, addr uint64) error {
+	ctrl, err := dbg.impl.TaskControl(t, addr)
 	if err != nil {
 		return err
 	}

@@ -330,10 +330,10 @@ func (h *controlHandler) handleControl(ctx debugger.Context, intno uint64, data 
 	return debugger.HookResult_Done
 }
 
-func (dbg *Dbg[Impl]) AddHook(typ emulator.HookType, callback any, data any, begin, end uint64) (debugger.HookHandler, error) {
-	return dbg.hookManger.addHook(dbg.impl(), typ, callback, data, begin, end)
+func (dbg *Dbg) AddHook(typ emulator.HookType, callback any, data any, begin, end uint64) (debugger.HookHandler, error) {
+	return dbg.hookManger.addHook(dbg.impl, typ, callback, data, begin, end)
 }
 
-func (dbg *Dbg[Impl]) AddControl(callback debugger.ControlCallback, data any) (debugger.ControlHandler, error) {
-	return dbg.hookManger.addControl(dbg.impl(), callback, data)
+func (dbg *Dbg) AddControl(callback debugger.ControlCallback, data any) (debugger.ControlHandler, error) {
+	return dbg.hookManger.addControl(dbg.impl, callback, data)
 }

@@ -14,48 +14,44 @@ const (
 	POINTER_SIZE     = 8
 )
 
-type Arm64Dbg[D internal.Debugger] struct {
-	internal.Dbg[D]
-}
-
-type arm64Dbg struct {
-	Arm64Dbg[*arm64Dbg]
+type Arm64Dbg struct {
+	internal.Dbg
 }
 
 func NewArm64Debugger(emu emulator.Emulator) (debugger.Debugger, error) {
-	dbg := new(arm64Dbg)
-	err := dbg.ExtendInit(emu)
+	dbg := new(Arm64Dbg)
+	err := dbg.Init(dbg, emu)
 	if err != nil {
 		return nil, err
 	}
 	return dbg, nil
 }
 
-func (dbg *Arm64Dbg[D]) ExtendInit(emu emulator.Emulator) error {
-	return dbg.Dbg.Init(emu)
+func (dbg *Arm64Dbg) Init(impl internal.Debugger, emu emulator.Emulator) error {
+	return dbg.Dbg.Init(impl, emu)
 }
 
-func (dbg *Arm64Dbg[D]) Close() error {
+func (dbg *Arm64Dbg) Close() error {
 	return dbg.Dbg.Close()
 }
 
-func (dbg *Arm64Dbg[D]) PointerSize() uint64 {
+func (dbg *Arm64Dbg) PointerSize() uint64 {
 	return POINTER_SIZE
 }
 
-func (dbg *Arm64Dbg[D]) StackAlign() uint64 {
+func (dbg *Arm64Dbg) StackAlign() uint64 {
 	return 16
 }
 
-func (dbg *Arm64Dbg[D]) PC() emulator.Reg {
+func (dbg *Arm64Dbg) PC() emulator.Reg {
 	return emu_arm64.ARM64_REG_PC
 }
 
-func (dbg *Arm64Dbg[D]) SP() emulator.Reg {
+func (dbg *Arm64Dbg) SP() emulator.Reg {
 	return emu_arm64.ARM64_REG_SP
 }
 
-func (dbg *Arm64Dbg[D]) Args(ctx debugger.RegisterContext, calling debugger.Calling) (debugger.Args, error) {
+func (dbg *Arm64Dbg) Args(ctx debugger.RegisterContext, calling debugger.Calling) (debugger.Args, error) {
 	switch calling {
 	case debugger.Calling_Default:
 	case debugger.Calling_Fastcall:
@@ -81,7 +77,7 @@ func (dbg *Arm64Dbg[D]) Args(ctx debugger.RegisterContext, calling debugger.Call
 	}), nil
 }
 
-func (dbg *Arm64Dbg[D]) ArgWrite(ctx debugger.RegisterContext, calling debugger.Calling, args ...any) error {
+func (dbg *Arm64Dbg) ArgWrite(ctx debugger.RegisterContext, calling debugger.Calling, args ...any) error {
 	switch calling {
 	case debugger.Calling_Default:
 	case debugger.Calling_Fastcall:
@@ -107,7 +103,7 @@ func (dbg *Arm64Dbg[D]) ArgWrite(ctx debugger.RegisterContext, calling debugger.
 	return ptr.MemWrite(buf)
 }
 
-func (dbg *Arm64Dbg[D]) RetExtract(ctx debugger.RegisterContext, val any) error {
+func (dbg *Arm64Dbg) RetExtract(ctx debugger.RegisterContext, val any) error {
 	if internal.GetPtr(val) == nil {
 		return debugger.ErrArgumentInvalid
 	}
@@ -115,7 +111,7 @@ func (dbg *Arm64Dbg[D]) RetExtract(ctx debugger.RegisterContext, val any) error 
 	return encoding.Decode(stream, val)
 }
 
-func (dbg *Arm64Dbg[D]) RetWrite(ctx debugger.RegisterContext, val any) error {
+func (dbg *Arm64Dbg) RetWrite(ctx debugger.RegisterContext, val any) error {
 	if internal.GetPtr(val) == nil {
 		return ctx.RegWrite(emu_arm64.ARM64_REG_X0, 0)
 	}
@@ -123,7 +119,7 @@ func (dbg *Arm64Dbg[D]) RetWrite(ctx debugger.RegisterContext, val any) error {
 	return encoding.Encode(stream, val)
 }
 
-func (dbg *Arm64Dbg[D]) Return(ctx debugger.RegisterContext) error {
+func (dbg *Arm64Dbg) Return(ctx debugger.RegisterContext) error {
 	lr, err := ctx.RegRead(emu_arm64.ARM64_REG_LR)
 	if err != nil {
 		return err
@@ -131,7 +127,7 @@ func (dbg *Arm64Dbg[D]) Return(ctx debugger.RegisterContext) error {
 	return ctx.RegWrite(emu_arm64.ARM64_REG_PC, lr)
 }
 
-func (dbg *Arm64Dbg[D]) InitStack() (uint64, error) {
+func (dbg *Arm64Dbg) InitStack() (uint64, error) {
 	region, err := dbg.MapAlloc(ARM64_STACK_SIZE, emulator.MEM_PROT_READ|emulator.MEM_PROT_WRITE)
 	if err != nil {
 		return 0, err
@@ -140,12 +136,12 @@ func (dbg *Arm64Dbg[D]) InitStack() (uint64, error) {
 	return stack, nil
 }
 
-func (dbg *Arm64Dbg[D]) CloseStack(stack uint64) error {
+func (dbg *Arm64Dbg) CloseStack(stack uint64) error {
 	begin := stack - ARM64_STACK_SIZE
 	return dbg.MapFree(begin, ARM64_STACK_SIZE)
 }
 
-func (dbg *Arm64Dbg[D]) TaskControl(task debugger.Task, addr uint64) (debugger.ControlHandler, error) {
+func (dbg *Arm64Dbg) TaskControl(task debugger.Task, addr uint64) (debugger.ControlHandler, error) {
 	ctrl, err := dbg.AddControl(func(ctx debugger.Context, data any) {
 		task := data.(debugger.Task)
 		if task.Context() != ctx {
