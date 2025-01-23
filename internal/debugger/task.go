@@ -11,6 +11,7 @@ import (
 
 type task interface {
 	debugger.Task
+	isChange() bool
 	appendRelease(func() error)
 	contextSave() error
 	contextRestore() error
@@ -110,12 +111,13 @@ func (tm *taskManager) loop() {
 		case task := <-tm.dispatch:
 			if task.Status() == debugger.TaskStatus_Done {
 				goto wait
-			}
-			tm.current = task
-			err := task.contextRestore()
-			if err != nil {
-				task.CancelCause(err)
-				goto wait
+			} else if tm.current != task || task.isChange() {
+				tm.current = task
+				err := task.contextRestore()
+				if err != nil {
+					task.CancelCause(err)
+					goto wait
+				}
 			}
 		}
 	exit:

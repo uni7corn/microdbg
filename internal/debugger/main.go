@@ -32,6 +32,7 @@ func newMain(dbg Debugger) (*mainTask, error) {
 
 func (m *mainTask) reset(ctx context.Context, dbg Debugger) {
 	m.taskCtx.ctx.RegWrite(dbg.SP(), m.taskCtx.stack)
+	m.change = true
 	m.status = debugger.TaskStatus_Pending
 	m.ctx, m.cancel = context.WithCancelCause(ctx)
 	ch := make(chan func(debugger.Task))

@@ -121,20 +121,21 @@ func (r *runner) Fork() (debugger.Task, error) {
 	return task, nil
 }
 
+func (r *runner) isChange() bool {
+	return r.change
+}
+
 func (r *runner) appendRelease(f func() error) {
 	r.releases = append(r.releases, f)
 }
 
 func (r *runner) contextSave() error {
+	r.change = false
 	r.status = debugger.TaskStatus_Running
 	return r.taskCtx.ctx.Save()
 }
 
 func (r *runner) contextRestore() error {
-	if !r.change {
-		return nil
-	}
-	r.change = false
 	return r.taskCtx.ctx.Restore()
 }
 
