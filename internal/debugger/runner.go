@@ -18,7 +18,6 @@ type runner struct {
 	taskCtx  *taskContext
 	send     chan<- func(debugger.Task)
 	change   bool
-	regs     map[emulator.Reg]uint64
 	status   debugger.TaskStatus
 }
 
@@ -40,10 +39,10 @@ func newTask(ctx context.Context, tc *taskContext, dbg Debugger) (task, error) {
 }
 
 func newRunner(ctx context.Context, tc *taskContext, dbg Debugger) *runner {
-	task := &runner{baseContext: baseContext[*runner]{dbg: dbg},
-		id: dbg.taskID(), taskCtx: tc,
-		regs: make(map[emulator.Reg]uint64),
-	}
+	task := new(runner)
+	task.dbg = dbg
+	task.id = dbg.taskID()
+	task.taskCtx = tc
 	task.ctx, task.cancel = context.WithCancelCause(ctx)
 	ch := make(chan func(debugger.Task))
 	task.send = ch
@@ -52,6 +51,7 @@ func newRunner(ctx context.Context, tc *taskContext, dbg Debugger) *runner {
 }
 
 func (r *runner) Close() error {
+	r.storage.Clear()
 	for i := len(r.releases) - 1; i >= 0; i-- {
 		r.releases[i]()
 	}
@@ -131,31 +131,11 @@ func (r *runner) contextSave() error {
 }
 
 func (r *runner) contextRestore() error {
-	defer clear(r.regs)
-	if r.change {
-		r.change = false
-		switch len(r.regs) {
-		case 0:
-		case 1:
-			for reg, val := range r.regs {
-				r.taskCtx.ctx.RegWrite(reg, val)
-			}
-		default:
-			regs := make([]emulator.Reg, 0, len(r.regs))
-			vals := make([]uint64, 0, len(r.regs))
-			for reg, val := range r.regs {
-				regs = append(regs, reg)
-				vals = append(vals, val)
-			}
-			r.taskCtx.ctx.RegWriteBatch(regs, vals)
-		}
-		return r.taskCtx.ctx.Restore()
+	if !r.change {
+		return nil
 	}
-	return nil
-}
-
-func (r *runner) hasChange() bool {
-	return r.change
+	r.change = false
+	return r.taskCtx.ctx.Restore()
 }
 
 func (r *runner) async(fn func(debugger.Task)) {
@@ -195,20 +175,12 @@ func (r *runner) TaskFork() (debugger.Task, error) {
 }
 
 func (r *runner) RegRead(reg emulator.Reg) (uint64, error) {
-	if val, ok := r.regs[reg]; ok {
-		return val, nil
-	}
-	val, err := r.taskCtx.ctx.RegRead(reg)
-	if err == nil {
-		r.regs[reg] = val
-	}
-	return val, err
+	return r.taskCtx.ctx.RegRead(reg)
 }
 
 func (r *runner) RegWrite(reg emulator.Reg, value uint64) error {
 	r.change = true
-	r.regs[reg] = value
-	return nil
+	return r.taskCtx.ctx.RegWrite(reg, value)
 }
 
 func (r *runner) RegReadPtr(reg emulator.Reg, ptr unsafe.Pointer) error {
@@ -216,36 +188,14 @@ func (r *runner) RegReadPtr(reg emulator.Reg, ptr unsafe.Pointer) error {
 }
 
 func (r *runner) RegWritePtr(reg emulator.Reg, ptr unsafe.Pointer) error {
+	r.change = true
 	return r.taskCtx.ctx.RegWritePtr(reg, ptr)
 }
 
 func (r *runner) RegReadBatch(regs ...emulator.Reg) ([]uint64, error) {
-	vals := make([]uint64, len(regs))
-	for i, reg := range regs {
-		val, ok := r.regs[reg]
-		if !ok {
-			reads, err := r.taskCtx.ctx.RegReadBatch(regs[i:]...)
-			if err != nil {
-				return nil, err
-			}
-			for n, reg := range regs[i:] {
-				r.regs[reg] = reads[n]
-			}
-			copy(vals[i:], reads)
-			break
-		}
-		vals[i] = val
-	}
-	return vals, nil
+	return r.taskCtx.ctx.RegReadBatch(regs...)
 }
 
 func (r *runner) RegWriteBatch(regs []emulator.Reg, vals []uint64) error {
-	if len(regs) != len(vals) {
-		return debugger.ErrArgumentInvalid
-	}
-	r.change = true
-	for i, reg := range regs {
-		r.regs[reg] = vals[i]
-	}
-	return nil
+	return r.taskCtx.ctx.RegWriteBatch(regs, vals)
 }

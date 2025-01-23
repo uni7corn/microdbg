@@ -14,8 +14,10 @@ type structData struct {
 func encodeStruct(typ reflect.Type, bs int) (handler, structSize) {
 	count := typ.NumField()
 	size := make(structSize, 0, count)
-	var offset uintptr
-	var needCustom bool
+	var (
+		offset     uintptr
+		needCustom bool
+	)
 	for field := range rangeField(typ) {
 		if field.Tag.Get("encoding") == "ignore" {
 			needCustom = true

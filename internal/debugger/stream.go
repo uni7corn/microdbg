@@ -84,11 +84,7 @@ func (ps *pointerStream) WriteDouble(d float64) error {
 }
 
 func (ps *pointerStream) WriteString(str string) error {
-	_, err := ps.Write([]byte(str))
-	if err != nil {
-		return err
-	}
-	_, err = ps.Write([]byte{0})
+	_, err := ps.Write(append([]byte(str), 0))
 	return err
 }
 

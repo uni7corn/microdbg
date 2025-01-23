@@ -117,12 +117,12 @@ func (rs *regStream) ReadString() (string, error) {
 }
 
 func (rs *regStream) ReadStream() (encoding.Stream, error) {
-	var addr uint64
+	var addr uint32
 	_, err := rs.Read(internal.ToPtrRaw(&addr))
 	if err != nil {
 		return nil, err
 	}
-	return internal.PointerStream(rs.dbg.ToPointer(addr), rs.ctx.StackAlloc, POINTER_SIZE), nil
+	return internal.PointerStream(rs.dbg.ToPointer(uint64(addr)), rs.ctx.StackAlloc, POINTER_SIZE), nil
 }
 
 func (rs *regStream) Write(b []byte) (int, error) {
@@ -197,7 +197,7 @@ func (rs *regStream) WriteStream(size int) (encoding.Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	addr := ptr.Address()
+	addr := uint32(ptr.Address())
 	_, err = rs.Write(internal.ToPtrRaw(&addr))
 	if err != nil {
 		return nil, err

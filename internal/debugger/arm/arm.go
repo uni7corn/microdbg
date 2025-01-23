@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	ARM_STACK_SIZE = 5 * 0x1000
+	ARM_STACK_SIZE = 10 * 0x1000
 	POINTER_SIZE   = 4
 )
 
@@ -27,7 +27,12 @@ func NewArmDebugger(emu emulator.Emulator) (debugger.Debugger, error) {
 }
 
 func (dbg *ArmDbg) Init(impl internal.Debugger, emu emulator.Emulator) error {
-	return dbg.Dbg.Init(impl, emu)
+	err := dbg.Dbg.Init(impl, emu)
+	if err != nil {
+		return err
+	}
+	dbg.enableVFP()
+	return nil
 }
 
 func (dbg *ArmDbg) Close() error {
@@ -155,4 +160,12 @@ func (dbg *ArmDbg) TaskControl(task debugger.Task, addr uint64) (debugger.Contro
 	ctx.RegWrite(emu_arm.ARM_REG_PC, addr)
 	ctx.RegWrite(emu_arm.ARM_REG_LR, ctrl.Addr())
 	return ctrl, nil
+}
+
+func (dbg *ArmDbg) enableVFP() {
+	emu := dbg.Emulator()
+	val, _ := emu.RegRead(emu_arm.ARM_REG_C1_C0_2)
+	val |= 0xf00000
+	emu.RegWrite(emu_arm.ARM_REG_C1_C0_2, val)
+	emu.RegWrite(emu_arm.ARM_REG_FPEXC, 0x40000000)
 }

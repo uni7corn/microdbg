@@ -70,9 +70,9 @@ func (h *hookManger) allocCtrlAddrs(dbg Debugger) error {
 	var asm []byte
 	switch emu.Arch() {
 	case emulator.ARCH_ARM:
-		asm = []byte{0x35, 0x00, 0x00, 0xef}
+		asm = []byte{0x35, 0x00, 0x00, 0xEF}
 	case emulator.ARCH_ARM64:
-		asm = []byte{0xa1, 0x06, 0x00, 0xd4}
+		asm = []byte{0xA1, 0x06, 0x00, 0xD4}
 	case emulator.ARCH_X86, emulator.ARCH_X86_64:
 		// asm = []byte{0x90}
 	}

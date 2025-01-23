@@ -50,8 +50,10 @@ func (p Pointer) MemWritePtr(size uint64, ptr unsafe.Pointer) error {
 }
 
 func (p Pointer) MemReadString() (string, error) {
-	var data []byte
-	var buf [0x10]byte
+	var (
+		data []byte
+		buf  [0x10]byte
+	)
 	size := uint64(len(buf))
 	for begin := p.addr; ; begin += size {
 		err := p.emu.MemReadPtr(begin, size, unsafe.Pointer(unsafe.SliceData(buf[:])))

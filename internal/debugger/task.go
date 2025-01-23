@@ -2,7 +2,6 @@ package debugger
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync/atomic"
 
@@ -15,7 +14,6 @@ type task interface {
 	appendRelease(func() error)
 	contextSave() error
 	contextRestore() error
-	hasChange() bool
 	async(func(debugger.Task))
 }
 
@@ -35,6 +33,7 @@ type taskManager struct {
 	exec     chan func()
 	hasSync  bool
 	id       int64
+	main     *mainTask
 	current  task
 	emuerr   error
 }
@@ -46,7 +45,7 @@ func (tm *taskManager) ctor(dbg Debugger) {
 	tm.suspend = make(chan struct{})
 	tm.resume = make(chan struct{})
 	tm.exec = make(chan func())
-	go tm.start(dbg)
+	tm.start(dbg)
 }
 
 func (tm *taskManager) dtor() {
@@ -57,43 +56,44 @@ func (tm *taskManager) dtor() {
 }
 
 func (tm *taskManager) start(dbg Debugger) {
-	stopped := make(chan struct{})
-	defer close(stopped)
-	tm.releases = append(tm.releases, func() {
-		<-stopped
-	})
-	go tm.collection()
-	select {
-	case <-tm.closed:
-		return
-	case task := <-tm.dispatch:
-		err := task.contextRestore()
-		if err != nil {
-			tm.emuerr = err
-			task.CancelCause(err)
-			return
-		}
+	main, err := newMain(dbg)
+	if err != nil {
+		panic(err)
+	}
+	tm.main = main
+	hook, err := dbg.AddControl(func(ctx debugger.Context, data any) { main.Close() }, nil)
+	if err != nil {
+		panic(err)
+	}
+	main.appendRelease(hook.Close)
+	main.reset(context.TODO(), dbg)
+	tm.current = main
+	addr := hook.Addr()
+	go func() {
+		stopped := make(chan struct{})
+		defer close(stopped)
+		tm.releases = append(tm.releases, func() {
+			<-stopped
+		})
+		go tm.collection()
 		emu := dbg.Emulator()
-		pc, err := emu.RegRead(dbg.PC())
-		if err != nil {
-			tm.emuerr = err
-			task.CancelCause(err)
-			return
-		}
-		tm.current = task
 		go func() {
 			tm.loop()
 			emu.Stop()
 		}()
-		err = emu.Start(pc, math.MaxUint64)
+		err := emu.Start(addr, math.MaxUint64)
 		if err == nil {
 			err = debugger.ErrEmulatorStop
 		} else {
 			err = debugger.NewPanicException(newGlobalContext(dbg), err)
 		}
 		tm.emuerr = err
+		if tm.current != nil {
+			tm.current.CancelCause(err)
+		}
 		tm.current = nil
-	}
+		main.release()
+	}()
 }
 
 func (tm *taskManager) loop() {
@@ -110,9 +110,6 @@ func (tm *taskManager) loop() {
 		case task := <-tm.dispatch:
 			if task.Status() == debugger.TaskStatus_Done {
 				goto wait
-			}
-			if task == tm.current && !task.hasChange() {
-				break
 			}
 			tm.current = task
 			err := task.contextRestore()
@@ -223,6 +220,18 @@ func (tm *taskManager) freeTaskContext(ctx *taskContext) {
 	}
 }
 
+func (tm *taskManager) createTask(ctx context.Context, dbg Debugger) (debugger.Task, error) {
+	if tm.main.Status() == debugger.TaskStatus_Done {
+		tm.main.reset(ctx, dbg)
+		return tm.main, nil
+	}
+	tc, err := tm.allocTaskContext()
+	if err != nil {
+		return nil, err
+	}
+	return newTask(ctx, tc, dbg)
+}
+
 func (tm *taskManager) runTask(task task) {
 	if tm.emuerr != nil {
 		task.CancelCause(tm.emuerr)
@@ -240,14 +249,18 @@ func (tm *taskManager) asyncTask(fn func(debugger.Task)) {
 	if task == nil {
 		return
 	}
-	err := task.contextSave()
-	if err != nil {
+	call := task.Status() != debugger.TaskStatus_Done
+	if !call {
+	} else if err := task.contextSave(); err != nil {
 		task.CancelCause(err)
-	} else if tm.suspendTask() {
-		task.async(fn)
-		tm.resumeTask()
+		call = false
 	}
-	fmt.Print()
+	if !tm.suspendTask() {
+		return
+	} else if call {
+		task.async(fn)
+	}
+	tm.resumeTask()
 }
 
 func (tm *taskManager) syncTask(fn func(debugger.Task)) {
@@ -255,25 +268,23 @@ func (tm *taskManager) syncTask(fn func(debugger.Task)) {
 	if task == nil {
 		return
 	}
-	err := task.contextSave()
-	if err != nil {
+	if task.Status() == debugger.TaskStatus_Done {
+	} else if err := task.contextSave(); err != nil {
 		task.CancelCause(err)
-		return
-	}
-	defer func() {
-		if ex := recover(); ex != nil {
-			task.CancelCause(debugger.NewPanicException(task.Context(), ex))
+	} else {
+		defer func() {
+			if ex := recover(); ex != nil {
+				task.CancelCause(debugger.NewPanicException(task.Context(), ex))
+			}
+		}()
+		tm.hasSync = true
+		fn(task)
+		tm.hasSync = false
+		if err = task.contextRestore(); err == nil {
+			return
 		}
-	}()
-	tm.hasSync = true
-	fn(task)
-	tm.hasSync = false
-	if !task.hasChange() {
-		return
-	} else if err = task.contextRestore(); err == nil {
-		return
+		task.CancelCause(err)
 	}
-	task.CancelCause(err)
 	if tm.suspendTask() {
 		tm.resumeTask()
 	}
@@ -311,11 +322,7 @@ func (tc *taskContext) clone() (*taskContext, error) {
 }
 
 func (dbg *Dbg) CreateTask(ctx context.Context) (debugger.Task, error) {
-	tc, err := dbg.taskManager.allocTaskContext()
-	if err != nil {
-		return nil, err
-	}
-	return newTask(ctx, tc, dbg.impl)
+	return dbg.taskManager.createTask(ctx, dbg.impl)
 }
 
 func (dbg *Dbg) CallTaskOf(t debugger.Task, addr uint64) error {

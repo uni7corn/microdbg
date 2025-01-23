@@ -28,7 +28,12 @@ func NewArm64Debugger(emu emulator.Emulator) (debugger.Debugger, error) {
 }
 
 func (dbg *Arm64Dbg) Init(impl internal.Debugger, emu emulator.Emulator) error {
-	return dbg.Dbg.Init(impl, emu)
+	err := dbg.Dbg.Init(impl, emu)
+	if err != nil {
+		return err
+	}
+	dbg.enableVFP()
+	return nil
 }
 
 func (dbg *Arm64Dbg) Close() error {
@@ -156,4 +161,11 @@ func (dbg *Arm64Dbg) TaskControl(task debugger.Task, addr uint64) (debugger.Cont
 	ctx.RegWrite(emu_arm64.ARM64_REG_PC, addr)
 	ctx.RegWrite(emu_arm64.ARM64_REG_LR, ctrl.Addr())
 	return ctrl, nil
+}
+
+func (dbg *Arm64Dbg) enableVFP() {
+	emu := dbg.Emulator()
+	val, _ := emu.RegRead(emu_arm64.ARM64_REG_CPACR_EL1)
+	val |= 0x300000
+	emu.RegWrite(emu_arm64.ARM64_REG_CPACR_EL1, val)
 }
