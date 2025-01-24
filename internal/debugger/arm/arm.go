@@ -47,6 +47,10 @@ func (dbg *ArmDbg) StackAlign() uint64 {
 	return 8
 }
 
+func (dbg *ArmDbg) StackSize() uint64 {
+	return ARM_STACK_SIZE
+}
+
 func (dbg *ArmDbg) PC() emulator.Reg {
 	return emu_arm.ARM_REG_PC
 }
