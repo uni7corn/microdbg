@@ -37,7 +37,7 @@ func (m *mainTask) reset(ctx context.Context, dbg Debugger) {
 	m.ctx, m.cancel = context.WithCancelCause(ctx)
 	ch := make(chan func(debugger.Task))
 	m.send = ch
-	go m.loop(ch)
+	go m.loop(m.ctx, ch)
 }
 
 func (m *mainTask) release() error {

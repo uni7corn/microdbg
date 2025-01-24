@@ -11,6 +11,7 @@ import (
 type hookManger struct {
 	releases  []func() error
 	ctrlAddrs []chan [2]uint64
+	ctrlRange [][2]uint64
 	mu        sync.Mutex
 	intrHooks []debugger.HookHandler
 	insnHooks []debugger.HookHandler
@@ -85,6 +86,7 @@ func (h *hookManger) allocCtrlAddrs(dbg Debugger) error {
 		ch <- [2]uint64{addr, addr + size}
 	}
 	h.ctrlAddrs = append(h.ctrlAddrs, ch)
+	h.ctrlRange = append(h.ctrlRange, [2]uint64{region.Addr, end + size})
 	return nil
 }
 
@@ -194,7 +196,7 @@ func (h *hookManger) addControl(dbg Debugger, callback debugger.ControlCallback,
 		addr:     addr,
 		callback: callback,
 	}
-	hook, err := h.addHook(dbg, emulator.HOOK_TYPE_INTR, handler.handleControl, data, addr[1], addr[1]+1)
+	hook, err := h.addHook(dbg, emulator.HOOK_TYPE_INTR, handler.handleControl, data, addr[1], addr[1]+2)
 	if err != nil {
 		h.ctrlAddrFree(addr)
 		return nil, err
@@ -210,9 +212,15 @@ func (h *hookManger) handleInterrupt(intno uint64, data any) {
 	data.(Debugger).asyncTask(func(task debugger.Task) {
 		result := debugger.HookResult_Next
 		ctx := task.Context()
+		pc, err := ctx.RegRead(ctx.PC())
+		if err != nil {
+			task.CancelCause(err)
+			return
+		}
+		isCtrl := h.isControl(pc)
 		for _, hook := range h.intrHooks {
 			handler := hook.(*hookHandler[debugger.InterruptCallback])
-			if handler.valid(emulator.HOOK_TYPE_INTR, ctx) {
+			if handler.valid(emulator.HOOK_TYPE_INTR, pc, isCtrl) {
 				result = handler.callback(ctx, intno, handler.data)
 				if result == debugger.HookResult_Done {
 					break
@@ -229,9 +237,15 @@ func (h *hookManger) handleInvalid(data any) bool {
 	data.(Debugger).asyncTask(func(task debugger.Task) {
 		result := debugger.HookResult_Next
 		ctx := task.Context()
+		pc, err := ctx.RegRead(ctx.PC())
+		if err != nil {
+			task.CancelCause(err)
+			return
+		}
+		isCtrl := h.isControl(pc)
 		for _, hook := range h.insnHooks {
 			handler := hook.(*hookHandler[debugger.InvalidCallback])
-			if handler.valid(emulator.HOOK_TYPE_INSN_INVALID, ctx) {
+			if handler.valid(emulator.HOOK_TYPE_INSN_INVALID, pc, isCtrl) {
 				result = handler.callback(ctx, handler.data)
 				if result == debugger.HookResult_Done {
 					break
@@ -249,8 +263,14 @@ func (h *hookManger) handleMemory(typ emulator.HookType, addr, size, value uint6
 	data.(Debugger).asyncTask(func(task debugger.Task) {
 		result := debugger.HookResult_Next
 		ctx := task.Context()
+		pc, err := ctx.RegRead(ctx.PC())
+		if err != nil {
+			task.CancelCause(err)
+			return
+		}
+		isCtrl := h.isControl(pc)
 		for _, hook := range h.memHooks {
-			var valid func(emulator.HookType, debugger.Context) bool
+			var valid func(emulator.HookType, uint64, bool) bool
 			var callback debugger.MemoryCallback
 			var data any
 			if handler, ok := hook.(*memHandler); ok {
@@ -262,7 +282,7 @@ func (h *hookManger) handleMemory(typ emulator.HookType, addr, size, value uint6
 				callback = handler.callback
 				data = handler.data
 			}
-			if valid(typ, ctx) {
+			if valid(typ, pc, isCtrl) {
 				result = callback(ctx, typ, addr, size, value, data)
 				if result == debugger.HookResult_Done {
 					break
@@ -274,6 +294,15 @@ func (h *hookManger) handleMemory(typ emulator.HookType, addr, size, value uint6
 		}
 	})
 	return true
+}
+
+func (h *hookManger) isControl(pc uint64) bool {
+	for i := range h.ctrlRange {
+		if pc > h.ctrlRange[i][0] && pc <= h.ctrlRange[i][1] {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *hookHandler[T]) Close() error {
@@ -288,15 +317,11 @@ func (h *hookHandler[T]) Type() emulator.HookType {
 	return h.typ
 }
 
-func (h *hookHandler[T]) valid(typ emulator.HookType, ctx debugger.Context) bool {
+func (h *hookHandler[T]) valid(typ emulator.HookType, pc uint64, isCtrl bool) bool {
 	if h.typ&typ == 0 {
 		return false
-	} else if h.begin > h.end {
+	} else if !isCtrl && h.begin > h.end {
 		return true
-	}
-	pc, err := ctx.RegRead(ctx.PC())
-	if err != nil {
-		return false
 	}
 	return pc >= h.begin && pc < h.end
 }

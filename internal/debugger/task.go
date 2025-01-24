@@ -282,10 +282,14 @@ func (tm *taskManager) syncTask(fn func(debugger.Task)) {
 		tm.hasSync = true
 		fn(task)
 		tm.hasSync = false
-		if err = task.contextRestore(); err == nil {
+		if task.Status() == debugger.TaskStatus_Done {
+		} else if !task.isChange() {
+			return
+		} else if err = task.contextRestore(); err != nil {
+			task.CancelCause(err)
+		} else {
 			return
 		}
-		task.CancelCause(err)
 	}
 	if tm.suspendTask() {
 		tm.resumeTask()

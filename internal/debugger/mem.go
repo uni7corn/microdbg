@@ -234,7 +234,12 @@ func (mm *memoryManager) memFree(dbg Debugger, addr uint64) error {
 			return nil
 		}
 	}
-	b.InsertBefore(addr, size)
+	if b.addr == end {
+		b.addr = addr
+		b.size += size
+	} else {
+		b.InsertBefore(addr, size)
+	}
 	return nil
 }
 

@@ -2,7 +2,6 @@ package debugger
 
 import (
 	"context"
-	"errors"
 	"unsafe"
 
 	"github.com/wnxd/microdbg/debugger"
@@ -46,7 +45,7 @@ func newRunner(ctx context.Context, tc *taskContext, dbg Debugger) *runner {
 	task.ctx, task.cancel = context.WithCancelCause(ctx)
 	ch := make(chan func(debugger.Task))
 	task.send = ch
-	go task.loop(ch)
+	go task.loop(task.ctx, ch)
 	return task
 }
 
@@ -100,7 +99,7 @@ func (r *runner) Done() <-chan struct{} {
 
 func (r *runner) Err() error {
 	err := context.Cause(r.ctx)
-	if errors.Is(err, debugger.TaskStatus_Done) {
+	if err == debugger.TaskStatus_Done {
 		err = nil
 	}
 	return err
@@ -146,10 +145,10 @@ func (r *runner) async(fn func(debugger.Task)) {
 	}
 }
 
-func (r *runner) loop(recv <-chan func(debugger.Task)) {
+func (r *runner) loop(ctx context.Context, recv <-chan func(debugger.Task)) {
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-ctx.Done():
 			return
 		case fn := <-recv:
 			r.handle(fn)
@@ -164,7 +163,9 @@ func (r *runner) handle(fn func(debugger.Task)) {
 		}
 	}()
 	fn(r)
-	r.dbg.runTask(r)
+	if r.status != debugger.TaskStatus_Done {
+		r.dbg.runTask(r)
+	}
 }
 
 func (r *runner) TaskID() int {
@@ -198,5 +199,6 @@ func (r *runner) RegReadBatch(regs ...emulator.Reg) ([]uint64, error) {
 }
 
 func (r *runner) RegWriteBatch(regs []emulator.Reg, vals []uint64) error {
+	r.change = true
 	return r.taskCtx.ctx.RegWriteBatch(regs, vals)
 }
