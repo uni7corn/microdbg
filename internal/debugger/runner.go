@@ -50,6 +50,7 @@ func newRunner(ctx context.Context, tc *taskContext, dbg Debugger) *runner {
 }
 
 func (r *runner) Close() error {
+	r.updateStatus(debugger.TaskStatus_Close)
 	r.storage.Clear()
 	for i := len(r.releases) - 1; i >= 0; i-- {
 		r.releases[i]()

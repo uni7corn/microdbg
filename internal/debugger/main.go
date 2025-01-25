@@ -48,6 +48,7 @@ func (m *mainTask) release() error {
 }
 
 func (m *mainTask) Close() error {
+	m.updateStatus(debugger.TaskStatus_Close)
 	m.storage.Clear()
 	for i := len(m.releases) - 1; i >= 0; i-- {
 		m.releases[i]()
