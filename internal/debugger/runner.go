@@ -106,7 +106,7 @@ func (r *runner) Err() error {
 }
 
 func (r *runner) CancelCause(cause error) {
-	r.status = debugger.TaskStatus_Done
+	r.updateStatus(debugger.TaskStatus_Done)
 	r.cancel(cause)
 }
 
@@ -129,12 +129,12 @@ func (r *runner) appendRelease(f func() error) {
 }
 
 func (r *runner) contextSave() error {
-	r.change = false
-	r.status = debugger.TaskStatus_Running
+	r.updateStatus(debugger.TaskStatus_Running)
 	return r.taskCtx.ctx.Save()
 }
 
 func (r *runner) contextRestore() error {
+	r.change = false
 	return r.taskCtx.ctx.Restore()
 }
 
@@ -163,8 +163,14 @@ func (r *runner) handle(fn func(debugger.Task)) {
 		}
 	}()
 	fn(r)
-	if r.status != debugger.TaskStatus_Done {
+	if r.status < debugger.TaskStatus_Done {
 		r.dbg.runTask(r)
+	}
+}
+
+func (r *runner) updateStatus(status debugger.TaskStatus) {
+	if r.status < status {
+		r.status = status
 	}
 }
 

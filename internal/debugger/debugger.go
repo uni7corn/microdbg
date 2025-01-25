@@ -7,8 +7,6 @@ import (
 
 type Debugger interface {
 	debugger.Debugger
-	PointerSize() uint64
-	StackAlign() uint64
 	PC() emulator.Reg
 	SP() emulator.Reg
 	Args(debugger.RegisterContext, debugger.Calling) (debugger.Args, error)

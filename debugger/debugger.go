@@ -8,12 +8,20 @@ import (
 
 type Debugger interface {
 	io.Closer
-	Emulator() emulator.Emulator
+	DebuggerInfo
 	MemoryManager
 	HookManger
 	TaskManager
 	ModuleManager
 	FileManager
+}
+
+type DebuggerInfo interface {
+	Emulator() emulator.Emulator
+	Arch() emulator.Arch
+	PointerSize() uint64
+	StackSize() uint64
+	StackAlign() uint64
 }
 
 func New(emu emulator.Emulator) (Debugger, error) {

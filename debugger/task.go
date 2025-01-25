@@ -21,6 +21,7 @@ const (
 	TaskStatus_Pending TaskStatus = iota
 	TaskStatus_Running
 	TaskStatus_Done
+	TaskStatus_Close
 )
 
 type Task interface {
@@ -38,6 +39,7 @@ type Task interface {
 }
 
 type TaskManager interface {
+	GetMainTask(ctx context.Context) (Task, error)
 	CreateTask(ctx context.Context) (Task, error)
 	CallTaskOf(task Task, addr uint64) error
 }

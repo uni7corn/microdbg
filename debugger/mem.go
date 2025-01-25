@@ -7,7 +7,6 @@ import (
 )
 
 type MemoryManager interface {
-	StackSize() uint64
 	MemMap(addr, size uint64, prot emulator.MemProt) (emulator.MemRegion, error)
 	MemUnmap(addr uint64, size uint64) error
 	MemProtect(addr, size uint64, prot emulator.MemProt) error

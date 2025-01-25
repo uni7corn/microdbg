@@ -222,11 +222,15 @@ func (tm *taskManager) freeTaskContext(ctx *taskContext) {
 	}
 }
 
-func (tm *taskManager) createTask(ctx context.Context, dbg Debugger) (debugger.Task, error) {
-	if tm.main.Status() == debugger.TaskStatus_Done {
-		tm.main.reset(ctx, dbg)
-		return tm.main, nil
+func (tm *taskManager) getMainTask(ctx context.Context, dbg Debugger) (debugger.Task, error) {
+	if tm.main.Status() != debugger.TaskStatus_Close {
+		return nil, debugger.TaskStatus_Running
 	}
+	tm.main.reset(ctx, dbg)
+	return tm.main, nil
+}
+
+func (tm *taskManager) createTask(ctx context.Context, dbg Debugger) (debugger.Task, error) {
 	tc, err := tm.allocTaskContext()
 	if err != nil {
 		return nil, err
@@ -325,6 +329,10 @@ func (tc *taskContext) clone() (*taskContext, error) {
 		releases: []func(){func() { newCtx.Close() }},
 		ctx:      newCtx, stack: tc.stack,
 	}, nil
+}
+
+func (dbg *Dbg) GetMainTask(ctx context.Context) (debugger.Task, error) {
+	return dbg.taskManager.getMainTask(ctx, dbg.impl)
 }
 
 func (dbg *Dbg) CreateTask(ctx context.Context) (debugger.Task, error) {

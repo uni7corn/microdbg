@@ -40,16 +40,20 @@ func (dbg *Arm64Dbg) Close() error {
 	return dbg.Dbg.Close()
 }
 
+func (dbg *Arm64Dbg) Arch() emulator.Arch {
+	return emulator.ARCH_ARM64
+}
+
 func (dbg *Arm64Dbg) PointerSize() uint64 {
 	return POINTER_SIZE
 }
 
-func (dbg *Arm64Dbg) StackAlign() uint64 {
-	return 16
-}
-
 func (dbg *Arm64Dbg) StackSize() uint64 {
 	return ARM64_STACK_SIZE
+}
+
+func (dbg *Arm64Dbg) StackAlign() uint64 {
+	return 16
 }
 
 func (dbg *Arm64Dbg) PC() emulator.Reg {
