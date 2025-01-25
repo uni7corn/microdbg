@@ -1,7 +1,7 @@
 package debugger
 
 import (
-	"slices"
+	"runtime"
 	"sync"
 
 	"github.com/wnxd/microdbg/debugger"
@@ -12,10 +12,9 @@ type hookManger struct {
 	releases  []func() error
 	ctrlAddrs []chan [2]uint64
 	ctrlRange [][2]uint64
-	mu        sync.Mutex
-	intrHooks []debugger.HookHandler
-	insnHooks []debugger.HookHandler
-	memHooks  []debugger.HookHandler
+	intrHooks sync.Map
+	insnHooks sync.Map
+	memHooks  sync.Map
 }
 
 type hookHandler[T any] struct {
@@ -38,6 +37,9 @@ type controlHandler struct {
 	releases []func() error
 	addr     [2]uint64
 	callback debugger.ControlCallback
+
+	file string
+	line int
 }
 
 func (h *hookManger) ctor(dbg Debugger) {
@@ -117,8 +119,6 @@ func (h *hookManger) ctrlAddrFree(addr [2]uint64) {
 }
 
 func (h *hookManger) addHook(dbg Debugger, typ emulator.HookType, callback any, data any, begin, end uint64) (debugger.HookHandler, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	switch typ {
 	case emulator.HOOK_TYPE_INTR:
 		callback, ok := callback.(debugger.InterruptCallback)
@@ -126,13 +126,11 @@ func (h *hookManger) addHook(dbg Debugger, typ emulator.HookType, callback any, 
 			return nil, debugger.ErrHookCallbackType
 		}
 		handler := &hookHandler[debugger.InterruptCallback]{typ: typ, callback: callback, data: data, begin: begin, end: end}
-		h.intrHooks = append(h.intrHooks, handler)
 		handler.releases = append(handler.releases, func() error {
-			h.mu.Lock()
-			h.intrHooks = slices.DeleteFunc(h.intrHooks, func(i debugger.HookHandler) bool { return i == handler })
-			h.mu.Unlock()
+			h.intrHooks.Delete(handler)
 			return nil
 		})
+		h.intrHooks.Store(handler, struct{}{})
 		return handler, nil
 	case emulator.HOOK_TYPE_INSN_INVALID:
 		callback, ok := callback.(debugger.InvalidCallback)
@@ -140,13 +138,11 @@ func (h *hookManger) addHook(dbg Debugger, typ emulator.HookType, callback any, 
 			return nil, debugger.ErrHookCallbackType
 		}
 		handler := &hookHandler[debugger.InvalidCallback]{typ: typ, callback: callback, data: data, begin: begin, end: end}
-		h.insnHooks = append(h.insnHooks, handler)
 		handler.releases = append(handler.releases, func() error {
-			h.mu.Lock()
-			h.insnHooks = slices.DeleteFunc(h.insnHooks, func(i debugger.HookHandler) bool { return i == handler })
-			h.mu.Unlock()
+			h.insnHooks.Delete(handler)
 			return nil
 		})
+		h.insnHooks.Store(handler, struct{}{})
 		return handler, nil
 	case emulator.HOOK_TYPE_CODE, emulator.HOOK_TYPE_BLOCK:
 		callback, ok := callback.(debugger.CodeCallback)
@@ -167,13 +163,11 @@ func (h *hookManger) addHook(dbg Debugger, typ emulator.HookType, callback any, 
 		}
 		handler := &memHandler{hookHandler: hookHandler[debugger.MemoryCallback]{typ: typ, callback: callback, data: data, begin: begin, end: end}}
 		if invalid := typ & emulator.HOOK_TYPE_MEM_INVALID; invalid != 0 {
-			h.memHooks = append(h.memHooks, handler)
 			handler.releases = append(handler.releases, func() error {
-				h.mu.Lock()
-				h.memHooks = slices.DeleteFunc(h.memHooks, func(i debugger.HookHandler) bool { return i == handler })
-				h.mu.Unlock()
+				h.memHooks.Delete(handler)
 				return nil
 			})
+			h.memHooks.Store(handler, struct{}{})
 		}
 		if valid := typ & (emulator.HOOK_TYPE_MEM_VALID | emulator.HOOK_TYPE_MEM_READ_AFTER); valid != 0 {
 			hook, err := dbg.Emulator().Hook(typ, handler.handleMemory, dbg, begin, end)
@@ -192,19 +186,24 @@ func (h *hookManger) addControl(dbg Debugger, callback debugger.ControlCallback,
 	if err != nil {
 		return nil, err
 	}
+	_, file1, lineNo1, _ := runtime.Caller(2)
+
 	handler := &controlHandler{
 		addr:     addr,
 		callback: callback,
+
+		file: file1,
+		line: lineNo1,
 	}
-	hook, err := h.addHook(dbg, emulator.HOOK_TYPE_INTR, handler.handleControl, data, addr[1], addr[1]+2)
+	hook, err := h.addHook(dbg, emulator.HOOK_TYPE_INTR, handler.handleControl, data, addr[1], addr[1]+1)
 	if err != nil {
 		h.ctrlAddrFree(addr)
 		return nil, err
 	}
-	handler.releases = append(handler.releases, hook.Close, func() error {
+	handler.releases = append(handler.releases, func() error {
 		h.ctrlAddrFree(addr)
 		return nil
-	})
+	}, hook.Close)
 	return handler, nil
 }
 
@@ -218,7 +217,7 @@ func (h *hookManger) handleInterrupt(intno uint64, data any) {
 			return
 		}
 		isCtrl := h.isControl(pc)
-		for _, hook := range h.intrHooks {
+		for hook := range h.intrHooks.Range {
 			handler := hook.(*hookHandler[debugger.InterruptCallback])
 			if handler.valid(emulator.HOOK_TYPE_INTR, pc, isCtrl) {
 				result = handler.callback(ctx, intno, handler.data)
@@ -242,10 +241,9 @@ func (h *hookManger) handleInvalid(data any) bool {
 			task.CancelCause(err)
 			return
 		}
-		isCtrl := h.isControl(pc)
-		for _, hook := range h.insnHooks {
+		for hook := range h.insnHooks.Range {
 			handler := hook.(*hookHandler[debugger.InvalidCallback])
-			if handler.valid(emulator.HOOK_TYPE_INSN_INVALID, pc, isCtrl) {
+			if handler.valid(emulator.HOOK_TYPE_INSN_INVALID, pc, false) {
 				result = handler.callback(ctx, handler.data)
 				if result == debugger.HookResult_Done {
 					break
@@ -268,8 +266,7 @@ func (h *hookManger) handleMemory(typ emulator.HookType, addr, size, value uint6
 			task.CancelCause(err)
 			return
 		}
-		isCtrl := h.isControl(pc)
-		for _, hook := range h.memHooks {
+		for hook := range h.memHooks.Range {
 			var valid func(emulator.HookType, uint64, bool) bool
 			var callback debugger.MemoryCallback
 			var data any
@@ -282,7 +279,7 @@ func (h *hookManger) handleMemory(typ emulator.HookType, addr, size, value uint6
 				callback = handler.callback
 				data = handler.data
 			}
-			if valid(typ, pc, isCtrl) {
+			if valid(typ, pc, false) {
 				result = callback(ctx, typ, addr, size, value, data)
 				if result == debugger.HookResult_Done {
 					break

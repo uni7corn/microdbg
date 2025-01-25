@@ -3,7 +3,9 @@ package debugger
 import (
 	"context"
 	"math"
+	"runtime/debug"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/wnxd/microdbg/debugger"
 	"github.com/wnxd/microdbg/emulator"
@@ -86,7 +88,7 @@ func (tm *taskManager) start(dbg Debugger) {
 		if err == nil {
 			err = debugger.ErrEmulatorStop
 		} else {
-			err = debugger.NewPanicException(newGlobalContext(dbg), err)
+			err = debugger.NewPanicException(newGlobalContext(dbg), err, nil)
 		}
 		tm.emuerr = err
 		if tm.current != nil {
@@ -109,9 +111,7 @@ func (tm *taskManager) loop() {
 		case <-tm.closed:
 			goto exit
 		case task := <-tm.dispatch:
-			if task.Status() == debugger.TaskStatus_Done {
-				goto wait
-			} else if tm.current != task || task.isChange() {
+			if tm.current != task || task.isChange() {
 				tm.current = task
 				err := task.contextRestore()
 				if err != nil {
@@ -141,8 +141,7 @@ func (tm *taskManager) collection() {
 		case <-tm.closed:
 			return
 		case tm.contexts <- current:
-			n := len(contexts) - 1
-			if n == -1 {
+			if n := len(contexts) - 1; n == -1 {
 				current = nil
 			} else {
 				current = contexts[n]
@@ -223,7 +222,7 @@ func (tm *taskManager) freeTaskContext(ctx *taskContext) {
 }
 
 func (tm *taskManager) getMainTask(ctx context.Context, dbg Debugger) (debugger.Task, error) {
-	if tm.main.Status() != debugger.TaskStatus_Close {
+	if !atomic.CompareAndSwapUintptr((*uintptr)(unsafe.Pointer(&tm.main.status)), uintptr(debugger.TaskStatus_Close), uintptr(debugger.TaskStatus_Pending)) {
 		return nil, debugger.TaskStatus_Running
 	}
 	tm.main.reset(ctx, dbg)
@@ -255,7 +254,7 @@ func (tm *taskManager) asyncTask(fn func(debugger.Task)) {
 	if task == nil {
 		return
 	}
-	call := task.Status() != debugger.TaskStatus_Done
+	call := task.Status() < debugger.TaskStatus_Done
 	if !call {
 	} else if err := task.contextSave(); err != nil {
 		task.CancelCause(err)
@@ -274,13 +273,13 @@ func (tm *taskManager) syncTask(fn func(debugger.Task)) {
 	if task == nil {
 		return
 	}
-	if task.Status() == debugger.TaskStatus_Done {
+	if task.Status() >= debugger.TaskStatus_Done {
 	} else if err := task.contextSave(); err != nil {
 		task.CancelCause(err)
 	} else {
 		defer func() {
 			if ex := recover(); ex != nil {
-				task.CancelCause(debugger.NewPanicException(task.Context(), ex))
+				task.CancelCause(debugger.NewPanicException(task.Context(), ex, debug.Stack()))
 			}
 		}()
 		tm.hasSync = true

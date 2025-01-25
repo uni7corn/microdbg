@@ -2,6 +2,7 @@ package debugger
 
 import (
 	"context"
+	"runtime/debug"
 	"unsafe"
 
 	"github.com/wnxd/microdbg/debugger"
@@ -27,11 +28,11 @@ func newTask(ctx context.Context, tc *taskContext, dbg Debugger) (task, error) {
 		if err != nil {
 			return nil, err
 		}
-	}
-	err = tc.ctx.Save()
-	if err != nil {
-		dbg.freeTaskContext(tc)
-		return nil, err
+		err = tc.ctx.Save()
+		if err != nil {
+			dbg.freeTaskContext(tc)
+			return nil, err
+		}
 	}
 	tc.ctx.RegWrite(dbg.SP(), tc.stack)
 	return newRunner(ctx, tc, dbg), nil
@@ -46,11 +47,11 @@ func newRunner(ctx context.Context, tc *taskContext, dbg Debugger) *runner {
 	ch := make(chan func(debugger.Task))
 	task.send = ch
 	go task.loop(task.ctx, ch)
+	task.change = true
 	return task
 }
 
 func (r *runner) Close() error {
-	r.updateStatus(debugger.TaskStatus_Close)
 	r.storage.Clear()
 	for i := len(r.releases) - 1; i >= 0; i-- {
 		r.releases[i]()
@@ -58,6 +59,7 @@ func (r *runner) Close() error {
 	r.releases = nil
 	r.CancelCause(nil)
 	r.dbg.freeTaskContext(r.taskCtx)
+	r.updateStatus(debugger.TaskStatus_Close)
 	return nil
 }
 
@@ -160,7 +162,7 @@ func (r *runner) loop(ctx context.Context, recv <-chan func(debugger.Task)) {
 func (r *runner) handle(fn func(debugger.Task)) {
 	defer func() {
 		if ex := recover(); ex != nil {
-			r.CancelCause(debugger.NewPanicException(r.Context(), ex))
+			r.CancelCause(debugger.NewPanicException(r.Context(), ex, debug.Stack()))
 		}
 	}()
 	fn(r)

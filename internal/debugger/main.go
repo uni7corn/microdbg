@@ -32,12 +32,11 @@ func newMain(dbg Debugger) (*mainTask, error) {
 
 func (m *mainTask) reset(ctx context.Context, dbg Debugger) {
 	m.taskCtx.ctx.RegWrite(dbg.SP(), m.taskCtx.stack)
-	m.change = true
-	m.status = debugger.TaskStatus_Pending
 	m.ctx, m.cancel = context.WithCancelCause(ctx)
 	ch := make(chan func(debugger.Task))
 	m.send = ch
 	go m.loop(m.ctx, ch)
+	m.change = true
 }
 
 func (m *mainTask) release() error {
@@ -48,13 +47,13 @@ func (m *mainTask) release() error {
 }
 
 func (m *mainTask) Close() error {
-	m.updateStatus(debugger.TaskStatus_Close)
 	m.storage.Clear()
 	for i := len(m.releases) - 1; i >= 0; i-- {
 		m.releases[i]()
 	}
 	m.releases = nil
 	m.CancelCause(nil)
+	m.updateStatus(debugger.TaskStatus_Close)
 	return nil
 }
 

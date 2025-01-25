@@ -51,7 +51,8 @@ type InvalidMemoryException struct {
 
 type PanicException struct {
 	simulateException
-	v any
+	v     any
+	stack []byte
 }
 
 func (e *simulateException) String() string {
@@ -98,7 +99,7 @@ func (e *InvalidMemoryException) Value() uint64 {
 }
 
 func (e *PanicException) Error() string {
-	return fmt.Sprintf("[Panic] %s, panic: %v", &e.simulateException, e.v)
+	return fmt.Sprintf("[Panic] %s, panic: %v\n%s", &e.simulateException, e.v, e.stack)
 }
 
 func (e *PanicException) Panic() any {
@@ -142,9 +143,10 @@ func NewInvalidMemoryException(ctx Context, typ emulator.HookType, addr, size, v
 	}
 }
 
-func NewPanicException(ctx Context, v any) SimulateException {
+func NewPanicException(ctx Context, v any, stack []byte) SimulateException {
 	return &PanicException{
 		simulateException: initException(ctx),
 		v:                 v,
+		stack:             stack,
 	}
 }
