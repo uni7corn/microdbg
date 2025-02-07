@@ -11,6 +11,7 @@ import (
 
 	"github.com/wnxd/microdbg/debugger"
 	"github.com/wnxd/microdbg/filesystem"
+	"github.com/wnxd/microdbg/socket"
 )
 
 type fileRef struct {
@@ -182,6 +183,16 @@ func (fm *fileManager) Readlink(name string) (string, error) {
 	return "", fs.ErrInvalid
 }
 
+func (fm *fileManager) NewSocket(network socket.Network) (socket.Socket, error) {
+	for _, handler := range fm.handlers {
+		s, err := handler.NewSocket(network)
+		if err == nil {
+			return s, nil
+		}
+	}
+	return socket.New(network), nil
+}
+
 func (f *fileRef) Close() error {
 	i := atomic.AddInt64(&f.count, -1)
 	if i > 0 {
@@ -227,6 +238,13 @@ func (f *fileRef) OpenFile(name string, flag filesystem.FileFlag, perm fs.FileMo
 func (f *fileRef) Mkdir(name string, perm fs.FileMode) error {
 	if dir, ok := f.file.(filesystem.Dir); ok {
 		return dir.Mkdir(name, perm)
+	}
+	return errors.ErrUnsupported
+}
+
+func (f *fileRef) Control(op int, arg any) error {
+	if ctl, ok := f.file.(filesystem.ControlFile); ok {
+		return ctl.Control(op, arg)
 	}
 	return errors.ErrUnsupported
 }

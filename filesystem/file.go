@@ -16,3 +16,8 @@ type WriteFile interface {
 	File
 	Write(b []byte) (n int, err error)
 }
+
+type ControlFile interface {
+	File
+	Control(op int, arg any) error
+}
